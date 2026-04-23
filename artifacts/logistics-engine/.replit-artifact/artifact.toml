@@ -12,10 +12,20 @@ version = "1.0.0"
 [[services]]
 name = "web"
 paths = [ "/" ]
-localPort = 5000
+localPort = 22111
 
 [services.development]
-run = "streamlit run /home/runner/workspace/app.py --server.port 5000"
+run = "pnpm --filter @workspace/logistics-engine run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/logistics-engine", "run", "build" ]
+publicDir = "artifacts/logistics-engine/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
 
 [services.env]
-PORT = "5000"
+PORT = "22111"
+BASE_PATH = "/"

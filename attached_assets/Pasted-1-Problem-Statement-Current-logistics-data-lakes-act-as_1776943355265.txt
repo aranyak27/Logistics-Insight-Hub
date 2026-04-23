@@ -1,0 +1,82 @@
+1. Problem Statement
+
+Current logistics data lakes act as "read-only swamps".
+
+The Pains: Business users cannot combine structured data (historical spend) with unstructured documents (new invoices) without manual analyst intervention.
+
+Failures: Existing flows fail due to high analyst dependency, low trust (LLM hallucinations), and context switching between document viewers and BI tools.
++1
+
+Success in 5 Minutes: A user uploads a PDF, reviews extracted data, saves it, and immediately asks a follow-up question that incorporates that new data into a trend chart.
++3
+
+2. Users + Jobs-to-be-Done (JTBD)
+
+Persona	Role	Primary Objective
+Sarah (Ops Manager)	Daily carrier coordination and invoice approval.	Ensure billed amounts match contracted rates.
+Marcus (VP Supply Chain)	Strategic spend management and vendor negotiation.	Identify and reduce "hidden" surcharges across the network.
+Testable JTBD Statements:
++1
+
+When I receive an invoice, I want to extract line-items automatically so I can avoid manual entry errors.
+
+When a surcharge is flagged, I want to see exactly where it is in the PDF so I can trust the extraction.
+
+When I ask about spend, I want the system to show me the underlying logic so I can verify the calculation.
+
+When I see a data table, I want to see a corresponding visualization so I can quickly identify outliers.
+
+When I upload new data, I want to ask a follow-up question so I can see how it changes my monthly totals.
+
+3. Product Scope
+
+MVP (24-Hour Build): * Vision-agent for PDF extraction (Vendor, Date, Line Items).
+
+Local "Data Lake" (CSV-based) for storage.
+
+Chat interface with "NL-to-Python" logic and Plotly charts.
+
+Out of Scope: Multi-user authentication, API integrations with external ERPs, batch-processing of 100+ documents.
++1
+
+Assumptions: Users provide legible PDFs; data is stored in a standardized local CSV format.
+
+4. 
+
+Key Flows 
+Flow A (Ask → Answer): User asks "What is my total spend?" → Agent generates Python → Displays Table + Chart → User asks "Filter by Maersk" (Follow-up).
+
+Flow B (Upload → Store → Query): User uploads PDF → Agent extracts and displays table → User reviews/edits and clicks "Store" → User queries: "How does this new invoice change my Maersk total?".
++1
+
+5. 
+
+Trust, Safety & Failure Handling 
+No Silent Guessing: If a question is ambiguous, the agent must ask for clarification (e.g., "Do you mean total spend or count of shipments?").
++1
+
+Transparency: Every answer must display the underlying code/logic used to generate the result.
+
+Groundedness: Answers must only use data from the local store; if data is missing, the agent states it cannot answer.
++1
+
+Extraction Review: A mandatory "Review Step" allows users to correct OCR/Vision errors before the data hits the "Lake".
+
+6. 
+
+Metrics & Success Criteria 
+North-Star Metric: Reconciliation Velocity (Time from PDF upload to the first data-backed query using that record).
+
+Supporting Metrics:
+
+Extraction Fidelity: % of fields accepted without user edits.
+
+Logic Transparency Usage: % of users who expand the "View Logic" section.
+
+Follow-up Depth: Average number of refinement queries per session.
+
+Visualization Success: % of queries that successfully render a chart.
+
+Query Success Rate: % of NL queries that do not result in a code error.
+
+Go/No-Go Pilot Criteria: System must achieve >85% extraction accuracy on 10 sample GoComet invoices.

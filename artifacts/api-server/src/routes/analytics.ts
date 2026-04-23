@@ -7,7 +7,13 @@ const router = Router();
 
 const DATA_FILE = path.resolve(process.cwd(), "../../freight_data.csv");
 
-const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? "" });
+const genai = new GoogleGenAI({
+  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY ?? process.env.GEMINI_API_KEY ?? "",
+  httpOptions: {
+    apiVersion: "",
+    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com",
+  },
+});
 
 function parseCsv(content: string): Record<string, string>[] {
   const lines = content.trim().split("\n");
@@ -103,7 +109,7 @@ If the question is general (e.g. total spend), aggregate appropriately.
 Do NOT return any text outside the JSON object.`;
 
     const response = await genai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
     });
 

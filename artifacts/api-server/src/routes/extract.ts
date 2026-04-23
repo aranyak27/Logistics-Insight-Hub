@@ -5,7 +5,13 @@ import { GoogleGenAI } from "@google/genai";
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
-const genai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY ?? "" });
+const genai = new GoogleGenAI({
+  apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY ?? process.env.GEMINI_API_KEY ?? "",
+  httpOptions: {
+    apiVersion: "",
+    baseUrl: process.env.AI_INTEGRATIONS_GEMINI_BASE_URL ?? "https://generativelanguage.googleapis.com",
+  },
+});
 
 const EXTRACT_PROMPT = `You are an expert logistics invoice parser.
 Extract all freight invoice line items from this document/image.
@@ -46,7 +52,7 @@ router.post("/extract", upload.single("file"), async (req, res) => {
     }
 
     const response = await genai.models.generateContent({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash",
       contents: [{ role: "user", parts: parts as never[] }],
     });
 

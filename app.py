@@ -12,7 +12,7 @@ import io
 import re
 from datetime import datetime
 
-DATA_FILE = "freight_data.csv"
+DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "freight_data.csv")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
 st.set_page_config(
@@ -397,7 +397,6 @@ def sidebar_section():
 
         edited_df = st.sidebar.data_editor(
             st.session_state["extracted_df"],
-            use_container_width=True,
             num_rows="dynamic",
             key="editor_review",
             column_config={
@@ -467,10 +466,10 @@ def chat_section():
             result_df = entry.get("result_df")
             if result_df is not None and isinstance(result_df, pd.DataFrame) and not result_df.empty:
                 st.markdown("**Result Table:**")
-                st.dataframe(result_df, use_container_width=True, hide_index=True)
+                st.dataframe(result_df, hide_index=True)
 
             if entry.get("chart") is not None:
-                st.plotly_chart(entry["chart"], use_container_width=True, key=f"chart_{i}")
+                st.plotly_chart(entry["chart"], key=f"chart_{i}")
 
     question = st.chat_input("Ask a question about your freight data...")
 
@@ -504,13 +503,12 @@ def chat_section():
                     result_df = output.get("result_df")
                     if result_df is not None and isinstance(result_df, pd.DataFrame) and not result_df.empty:
                         st.markdown("**Result Table:**")
-                        st.dataframe(result_df, use_container_width=True, hide_index=True)
+                        st.dataframe(result_df, hide_index=True)
 
                     chart = output.get("chart")
                     if chart is not None:
                         st.plotly_chart(
                             chart,
-                            use_container_width=True,
                             key=f"chart_new_{len(st.session_state['chat_history'])}"
                         )
 
@@ -571,7 +569,7 @@ def data_lake_section():
 
     st.markdown("---")
     st.markdown("### Full Dataset")
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, hide_index=True)
 
     if "vendor" in df.columns and "amount" in df.columns:
         st.markdown("---")
@@ -602,7 +600,7 @@ def data_lake_section():
             )
             fig1.update_xaxes(showgrid=False)
             fig1.update_yaxes(showgrid=True, gridcolor="#EEF4FF")
-            st.plotly_chart(fig1, use_container_width=True)
+            st.plotly_chart(fig1)
 
         with col_b:
             if "category" in df.columns:
@@ -625,7 +623,7 @@ def data_lake_section():
                     paper_bgcolor="white",
                     title_font_color="#1B5CBA"
                 )
-                st.plotly_chart(fig2, use_container_width=True)
+                st.plotly_chart(fig2)
 
 
 def main():

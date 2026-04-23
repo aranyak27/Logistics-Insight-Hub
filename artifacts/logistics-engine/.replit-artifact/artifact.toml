@@ -1,0 +1,21 @@
+kind = "web"
+previewPath = "/"
+title = "Logistics Intelligence Engine"
+version = "1.0.0"
+id = "artifacts/logistics-engine"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 5000
+
+[services.development]
+run = "streamlit run /home/runner/workspace/app.py --server.port 5000"
+
+[services.env]
+PORT = "5000"

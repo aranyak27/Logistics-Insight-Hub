@@ -1,0 +1,6 @@
+invoice_id,vendor,date,amount,category
+INV-2024-001,Maersk Line,2024-01-15,12500.00,Ocean Freight
+INV-2024-002,DHL Express,2024-01-22,3200.50,Air Freight
+INV-2024-003,Maersk Line,2024-02-03,14800.00,Ocean Freight
+INV-2024-004,FedEx Freight,2024-02-18,2750.75,Ground Freight
+INV-2024-005,Kuehne + Nagel,2024-03-05,8900.00,Customs & Duties

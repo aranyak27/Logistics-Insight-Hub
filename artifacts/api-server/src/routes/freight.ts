@@ -1,5 +1,6 @@
 import { Router } from "express";
 import db from "../db";
+import { getRates, toUSD } from "../rates";
 
 const router = Router();
 
@@ -53,11 +54,29 @@ const insertLine = db.prepare(
 );
 const deleteHeader = db.prepare("DELETE FROM invoice_headers WHERE invoice_id = ?");
 
-router.get("/freight", (_req, res) => {
+router.get("/freight", async (_req, res) => {
   try {
     const headers = getHeaders.all();
     const line_items = getLineItems.all();
-    res.json({ headers, line_items });
+
+    const rates = await getRates();
+
+    const currencyByInvoice: Record<string, string> = {};
+    const headersWithUSD = headers.map((h) => {
+      currencyByInvoice[h.invoice_id] = h.currency;
+      return { ...h, usd_total: toUSD(h.grand_total, h.currency, rates) };
+    });
+
+    const lineItemsWithUSD = line_items.map((li) => {
+      const cur = currencyByInvoice[li.invoice_id] ?? "USD";
+      return {
+        ...li,
+        usd_unit_price: toUSD(li.unit_price, cur, rates),
+        usd_total_price: toUSD(li.total_price, cur, rates),
+      };
+    });
+
+    res.json({ headers: headersWithUSD, line_items: lineItemsWithUSD, rates_source: "open.er-api.com" });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }

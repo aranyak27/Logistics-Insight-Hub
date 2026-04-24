@@ -7,6 +7,7 @@ export interface InvoiceHeader {
   invoice_date: string | null;
   grand_total: number;
   currency: string;
+  usd_total?: number;
 }
 
 export interface LineItem {
@@ -16,6 +17,8 @@ export interface LineItem {
   quantity: number;
   unit_price: number;
   total_price: number;
+  usd_unit_price?: number;
+  usd_total_price?: number;
 }
 
 export interface ExtractedInvoice {

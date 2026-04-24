@@ -41,16 +41,16 @@ interface AnalyticsResult {
   chart_title: string;
 }
 
-router.post("/analytics", async (req, res) => {
+router.post("/analytics", async (req, res): Promise<void> => {
   try {
     const { question, history = [] } = req.body as AnalyticsRequest;
-    if (!question) return res.status(400).json({ error: "question required" });
+    if (!question) { res.status(400).json({ error: "question required" }); return; }
 
     const headers = getHeaders.all() as Record<string, unknown>[];
     const lineItems = getLineItems.all() as Record<string, unknown>[];
 
     if (headers.length === 0) {
-      return res.json({
+      res.json({
         summary: "I don't have any data yet. Please upload some freight invoices first.",
         code: "",
         explanation: "",
@@ -60,6 +60,7 @@ router.post("/analytics", async (req, res) => {
         chart_data: [],
         chart_title: "",
       } as AnalyticsResult);
+      return;
     }
 
     const historyText =

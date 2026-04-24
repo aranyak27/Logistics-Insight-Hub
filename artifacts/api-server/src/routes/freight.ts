@@ -63,14 +63,15 @@ router.get("/freight", (_req, res) => {
   }
 });
 
-router.post("/freight", (req, res) => {
+router.post("/freight", (req, res): void => {
   try {
     const invoice = req.body as InvoicePayload;
-    if (!invoice?.invoice_id) return res.status(400).json({ error: "invoice_id required" });
+    if (!invoice?.invoice_id) { res.status(400).json({ error: "invoice_id required" }); return; }
 
     const existing = findHeader.get(invoice.invoice_id);
     if (existing) {
-      return res.json({ duplicate: true, existing });
+      res.json({ duplicate: true, existing });
+      return;
     }
 
     const doInsert = db.transaction(() => {
@@ -98,11 +99,11 @@ router.post("/freight", (req, res) => {
   }
 });
 
-router.put("/freight/:invoiceId", (req, res) => {
+router.put("/freight/:invoiceId", (req, res): void => {
   try {
     const { invoiceId } = req.params;
     const invoice = req.body as InvoicePayload;
-    if (!invoice?.invoice_id) return res.status(400).json({ error: "invoice_id required" });
+    if (!invoice?.invoice_id) { res.status(400).json({ error: "invoice_id required" }); return; }
 
     const doOverwrite = db.transaction(() => {
       deleteHeader.run(invoiceId);

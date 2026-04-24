@@ -38,9 +38,9 @@ Rules:
 - If invoice_id is not found, generate a plausible one like "INV-UNKNOWN-001".
 - Do NOT return any text outside the JSON object.`;
 
-router.post("/extract", upload.single("file"), async (req, res) => {
+router.post("/extract", upload.single("file"), async (req, res): Promise<void> => {
   try {
-    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    if (!req.file) { res.status(400).json({ error: "No file uploaded" }); return; }
 
     const { buffer, mimetype } = req.file;
     const b64 = buffer.toString("base64");

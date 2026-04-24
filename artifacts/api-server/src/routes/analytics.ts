@@ -1,11 +1,8 @@
 import { Router } from "express";
-import fs from "fs";
-import path from "path";
 import { GoogleGenAI } from "@google/genai";
+import db from "../db";
 
 const router = Router();
-
-const DATA_FILE = path.resolve(process.cwd(), "../../freight_data.csv");
 
 const genai = new GoogleGenAI({
   apiKey: process.env.AI_INTEGRATIONS_GEMINI_API_KEY ?? process.env.GEMINI_API_KEY ?? "",
@@ -15,15 +12,8 @@ const genai = new GoogleGenAI({
   },
 });
 
-function parseCsv(content: string): Record<string, string>[] {
-  const lines = content.trim().split("\n");
-  if (lines.length < 2) return [];
-  const headers = lines[0].split(",").map((h) => h.trim());
-  return lines.slice(1).map((line) => {
-    const vals = line.split(",").map((v) => v.trim());
-    return Object.fromEntries(headers.map((h, i) => [h, vals[i] ?? ""]));
-  });
-}
+const getHeaders = db.prepare("SELECT * FROM invoice_headers");
+const getLineItems = db.prepare("SELECT * FROM invoice_line_items");
 
 interface HistoryItem {
   question: string;
@@ -56,15 +46,12 @@ router.post("/analytics", async (req, res) => {
     const { question, history = [] } = req.body as AnalyticsRequest;
     if (!question) return res.status(400).json({ error: "question required" });
 
-    let rawData: Record<string, string>[] = [];
-    if (fs.existsSync(DATA_FILE)) {
-      rawData = parseCsv(fs.readFileSync(DATA_FILE, "utf8"));
-    }
+    const headers = getHeaders.all() as Record<string, unknown>[];
+    const lineItems = getLineItems.all() as Record<string, unknown>[];
 
-    if (rawData.length === 0) {
+    if (headers.length === 0) {
       return res.json({
-        summary:
-          "I don't have any data yet. Please upload some freight invoices first.",
+        summary: "I don't have any data yet. Please upload some freight invoices first.",
         code: "",
         explanation: "",
         result_rows: [],
@@ -82,22 +69,33 @@ router.post("/analytics", async (req, res) => {
             .join("\n\n")}`
         : "";
 
-    const dataJson = JSON.stringify(rawData, null, 2);
+    const prompt = `You are a logistics data analyst. You have access to a SQLite database with two tables:
 
-    const prompt = `You are a logistics data analyst. You have access to this freight data:
+TABLE: invoice_headers
+Schema: invoice_id TEXT PK, supplier_name TEXT, invoice_date TEXT (YYYY-MM-DD or NULL), grand_total REAL, currency TEXT
+Data:
+${JSON.stringify(headers, null, 2)}
 
-${dataJson}
+TABLE: invoice_line_items
+Schema: item_id INTEGER PK, invoice_id TEXT FK, description TEXT, quantity REAL, unit_price REAL, total_price REAL
+Data:
+${JSON.stringify(lineItems, null, 2)}
 
+Example SQL JOIN pattern:
+  SELECT h.supplier_name, SUM(li.total_price) AS total
+  FROM invoice_line_items li
+  JOIN invoice_headers h ON li.invoice_id = h.invoice_id
+  GROUP BY h.supplier_name;
 ${historyText}
 
 User question: "${question}"
 
 Analyze the data and answer the question. Return ONLY valid JSON (no markdown fences) with this exact shape:
 {
-  "summary": "<clear natural-language answer to the question, 1-3 sentences>",
-  "explanation": "<one sentence explaining the analytical approach, e.g. 'Grouped by vendor and summed the amount column'>",
-  "code": "<equivalent Python pandas code that would produce this result, e.g. df.groupby('vendor')['amount'].sum().reset_index()>",
-  "result_rows": [<array of result objects matching the analysis, e.g. [{\"vendor\":\"Maersk\",\"amount\":27300}]>],
+  "summary": "<clear natural-language answer to the question, 1-3 sentences. If invoice_date is NULL for any relevant rows, mention that those were excluded from date-based calculations.>",
+  "explanation": "<one sentence explaining the analytical approach, e.g. 'JOINed invoice_headers and invoice_line_items, grouped by supplier_name and summed total_price'>",
+  "code": "<the SQL query that would produce this result, using proper JOIN syntax between invoice_headers and invoice_line_items>",
+  "result_rows": [<array of result objects matching the analysis>],
   "result_cols": [<array of column names in result_rows>],
   "chart_type": "<one of: bar, pie, line, none — choose whichever best fits this analysis>",
   "chart_data": [{"name": "<label>", "value": <number>}],
@@ -105,7 +103,6 @@ Analyze the data and answer the question. Return ONLY valid JSON (no markdown fe
 }
 
 If the question cannot be answered with the available data, say so honestly in summary and set chart_type to "none", result_rows to [], result_cols to [].
-If the question is general (e.g. total spend), aggregate appropriately.
 Do NOT return any text outside the JSON object.`;
 
     const response = await genai.models.generateContent({

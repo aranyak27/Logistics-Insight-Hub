@@ -17,8 +17,9 @@ export default function App() {
     refetchInterval: false,
   });
 
-  const rows = data?.rows ?? [];
-  const vendorCount = new Set(rows.map((r) => r.vendor)).size;
+  const headers = data?.headers ?? [];
+  const lineItems = data?.line_items ?? [];
+  const supplierCount = new Set(headers.map((h) => h.supplier_name)).size;
 
   const onSaved = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ["freight"] });
@@ -26,7 +27,11 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <Sidebar recordCount={rows.length} vendorCount={vendorCount} onSaved={onSaved} />
+      <Sidebar
+        invoiceCount={headers.length}
+        supplierCount={supplierCount}
+        onSaved={onSaved}
+      />
 
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
@@ -67,10 +72,10 @@ export default function App() {
         <div className="flex-1 overflow-auto p-6">
           {tab === "chat" ? (
             <div className="h-full flex flex-col max-w-4xl mx-auto">
-              <ChatTab hasData={rows.length > 0} />
+              <ChatTab hasData={headers.length > 0} />
             </div>
           ) : (
-            <DataLakeTab rows={rows} />
+            <DataLakeTab data={{ headers, line_items: lineItems }} />
           )}
         </div>
       </main>

@@ -1,12 +1,35 @@
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 const API = `${BASE}/api`;
 
-export interface FreightRow {
+export interface InvoiceHeader {
   invoice_id: string;
-  vendor: string;
-  date: string;
-  amount: string;
-  category: string;
+  supplier_name: string;
+  invoice_date: string | null;
+  grand_total: number;
+  currency: string;
+}
+
+export interface LineItem {
+  item_id: number;
+  invoice_id: string;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+}
+
+export interface ExtractedInvoice {
+  invoice_id: string;
+  supplier_name: string;
+  invoice_date: string | null;
+  grand_total: number;
+  currency: string;
+  line_items: Array<{
+    description: string;
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+  }>;
 }
 
 export interface ChartPoint {
@@ -25,36 +48,39 @@ export interface AnalyticsResult {
   chart_title: string;
 }
 
-export interface ExtractedRow {
-  invoice_id: string;
-  vendor: string;
-  date: string;
-  amount: number;
-  category: string;
+export interface FreightData {
+  headers: InvoiceHeader[];
+  line_items: LineItem[];
 }
 
-export async function fetchFreight(): Promise<{ rows: FreightRow[]; columns: string[] }> {
+export async function fetchFreight(): Promise<FreightData> {
   const r = await fetch(`${API}/freight`);
   return r.json();
 }
 
-export async function saveFreightRows(rows: ExtractedRow[]): Promise<{ success: boolean; total: number }> {
-  const stringified = rows.map((r) => ({
-    invoice_id: r.invoice_id,
-    vendor: r.vendor,
-    date: r.date,
-    amount: String(r.amount),
-    category: r.category,
-  }));
+export async function saveInvoice(
+  invoice: ExtractedInvoice
+): Promise<{ success?: boolean; duplicate?: boolean; existing?: InvoiceHeader }> {
   const resp = await fetch(`${API}/freight`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ rows: stringified }),
+    body: JSON.stringify(invoice),
   });
   return resp.json();
 }
 
-export async function extractInvoice(file: File): Promise<{ rows: ExtractedRow[] }> {
+export async function overwriteInvoice(
+  invoice: ExtractedInvoice
+): Promise<{ success: boolean }> {
+  const resp = await fetch(`${API}/freight/${encodeURIComponent(invoice.invoice_id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(invoice),
+  });
+  return resp.json();
+}
+
+export async function extractInvoice(file: File): Promise<ExtractedInvoice> {
   const fd = new FormData();
   fd.append("file", file);
   const r = await fetch(`${API}/extract`, { method: "POST", body: fd });

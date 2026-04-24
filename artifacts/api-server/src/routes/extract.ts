@@ -14,22 +14,29 @@ const genai = new GoogleGenAI({
 });
 
 const EXTRACT_PROMPT = `You are an expert logistics invoice parser.
-Extract all freight invoice line items from this document/image.
+Extract the invoice data from this document/image and return a SINGLE nested JSON object.
 Return ONLY valid JSON (no markdown fences) with this exact shape:
 {
-  "rows": [
+  "invoice_id": "<the invoice number or ID found in the document, e.g. INV-2024-001>",
+  "supplier_name": "<the vendor or carrier company name>",
+  "invoice_date": "<YYYY-MM-DD format, or null if not found>",
+  "grand_total": <the final total amount as a number>,
+  "currency": "<3-letter currency code, e.g. USD, INR — default to USD if not found>",
+  "line_items": [
     {
-      "invoice_id": "<string, e.g. INV-2024-001>",
-      "vendor": "<carrier or logistics company name>",
-      "date": "<YYYY-MM-DD>",
-      "amount": <number>,
-      "category": "<one of: Ocean Freight, Air Freight, Ground Freight, Customs & Duties, Warehousing, Other>"
+      "description": "<what was charged, e.g. Ocean Freight, Fuel Surcharge, Customs Duty>",
+      "quantity": <number, default 1 if not specified>,
+      "unit_price": <price per unit as a number>,
+      "total_price": <quantity × unit_price as a number>
     }
   ]
 }
-If multiple line items exist, include all of them.
-If a field is not found, use sensible defaults.
-Do NOT return any text outside the JSON object.`;
+Rules:
+- If there are multiple line items on the invoice, include ALL of them in line_items.
+- If there are no explicit line items, synthesize one line item using the grand_total as total_price with quantity=1 and unit_price=grand_total.
+- If invoice_date is not found, use null (do NOT guess).
+- If invoice_id is not found, generate a plausible one like "INV-UNKNOWN-001".
+- Do NOT return any text outside the JSON object.`;
 
 router.post("/extract", upload.single("file"), async (req, res) => {
   try {
@@ -38,18 +45,10 @@ router.post("/extract", upload.single("file"), async (req, res) => {
     const { buffer, mimetype } = req.file;
     const b64 = buffer.toString("base64");
 
-    let parts: unknown[];
-    if (mimetype === "application/pdf") {
-      parts = [
-        { text: EXTRACT_PROMPT },
-        { inlineData: { mimeType: "application/pdf", data: b64 } },
-      ];
-    } else {
-      parts = [
-        { text: EXTRACT_PROMPT },
-        { inlineData: { mimeType: mimetype, data: b64 } },
-      ];
-    }
+    const parts = [
+      { text: EXTRACT_PROMPT },
+      { inlineData: { mimeType: mimetype, data: b64 } },
+    ];
 
     const response = await genai.models.generateContent({
       model: "gemini-2.5-flash",

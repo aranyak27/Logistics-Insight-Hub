@@ -1,24 +1,28 @@
 import { useRef, useState } from "react";
-import { extractInvoice, saveFreightRows, type ExtractedRow } from "../lib/api";
+import {
+  extractInvoice,
+  saveInvoice,
+  overwriteInvoice,
+  type ExtractedInvoice,
+  type InvoiceHeader,
+} from "../lib/api";
 
 interface Props {
-  recordCount: number;
-  vendorCount: number;
+  invoiceCount: number;
+  supplierCount: number;
   onSaved: () => void;
 }
 
-const CATEGORIES = [
-  "Ocean Freight", "Air Freight", "Ground Freight",
-  "Customs & Duties", "Warehousing", "Other",
-];
+const CURRENCIES = ["USD", "INR", "EUR", "GBP", "SGD", "AED", "CNY"];
 
-export function Sidebar({ recordCount, vendorCount, onSaved }: Props) {
+export function Sidebar({ invoiceCount, supplierCount, onSaved }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
-  const [rows, setRows] = useState<ExtractedRow[] | null>(null);
+  const [invoice, setInvoice] = useState<ExtractedInvoice | null>(null);
   const [loading, setLoading] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [duplicate, setDuplicate] = useState<InvoiceHeader | null>(null);
 
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -26,11 +30,12 @@ export function Sidebar({ recordCount, vendorCount, onSaved }: Props) {
     setFileName(file.name);
     setLoading(true);
     setError(null);
-    setRows(null);
+    setInvoice(null);
     setSaveMsg(null);
+    setDuplicate(null);
     try {
       const data = await extractInvoice(file);
-      setRows(data.rows);
+      setInvoice(data);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -38,26 +43,68 @@ export function Sidebar({ recordCount, vendorCount, onSaved }: Props) {
     }
   }
 
-  function updateRow(idx: number, field: keyof ExtractedRow, value: string) {
-    if (!rows) return;
-    const updated = [...rows];
-    if (field === "amount") {
-      updated[idx] = { ...updated[idx], amount: parseFloat(value) || 0 };
+  function updateHeader(field: keyof Omit<ExtractedInvoice, "line_items">, value: string) {
+    if (!invoice) return;
+    if (field === "grand_total") {
+      setInvoice({ ...invoice, grand_total: parseFloat(value) || 0 });
     } else {
-      updated[idx] = { ...updated[idx], [field]: value };
+      setInvoice({ ...invoice, [field]: value });
     }
-    setRows(updated);
+  }
+
+  function updateLineItem(idx: number, field: string, value: string) {
+    if (!invoice) return;
+    const items = [...invoice.line_items];
+    const num = parseFloat(value) || 0;
+    items[idx] = { ...items[idx], [field]: ["quantity", "unit_price", "total_price"].includes(field) ? num : value };
+    if (field === "quantity" || field === "unit_price") {
+      items[idx].total_price = parseFloat((items[idx].quantity * items[idx].unit_price).toFixed(2));
+    }
+    setInvoice({ ...invoice, line_items: items });
+  }
+
+  function addLineItem() {
+    if (!invoice) return;
+    setInvoice({
+      ...invoice,
+      line_items: [...invoice.line_items, { description: "", quantity: 1, unit_price: 0, total_price: 0 }],
+    });
+  }
+
+  function removeLineItem(idx: number) {
+    if (!invoice) return;
+    const items = invoice.line_items.filter((_, i) => i !== idx);
+    setInvoice({ ...invoice, line_items: items });
   }
 
   async function handleSave() {
-    if (!rows) return;
+    if (!invoice) return;
     setLoading(true);
+    setDuplicate(null);
     try {
-      await saveFreightRows(rows);
-      setSaveMsg(`${rows.length} record(s) saved to data lake!`);
-      setRows(null);
-      setFileName(null);
-      if (fileRef.current) fileRef.current.value = "";
+      const result = await saveInvoice(invoice);
+      if (result.duplicate) {
+        setDuplicate(result.existing!);
+      } else {
+        setSaveMsg(`Invoice ${invoice.invoice_id} saved with ${invoice.line_items.length} line item(s).`);
+        resetForm();
+        onSaved();
+      }
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleOverwrite() {
+    if (!invoice) return;
+    setLoading(true);
+    setDuplicate(null);
+    try {
+      await overwriteInvoice(invoice);
+      setSaveMsg(`Invoice ${invoice.invoice_id} overwritten successfully.`);
+      resetForm();
       onSaved();
     } catch (err) {
       setError(String(err));
@@ -66,12 +113,23 @@ export function Sidebar({ recordCount, vendorCount, onSaved }: Props) {
     }
   }
 
-  function handleClear() {
-    setRows(null);
+  function handleSkip() {
+    setDuplicate(null);
+    setSaveMsg(`Skipped — invoice ${invoice?.invoice_id} already exists in the data lake.`);
+    resetForm();
+  }
+
+  function resetForm() {
+    setInvoice(null);
     setFileName(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  function handleClear() {
+    resetForm();
     setError(null);
     setSaveMsg(null);
-    if (fileRef.current) fileRef.current.value = "";
+    setDuplicate(null);
   }
 
   return (
@@ -110,7 +168,7 @@ export function Sidebar({ recordCount, vendorCount, onSaved }: Props) {
         {loading && (
           <div className="mt-3 flex items-center gap-2 text-sm text-primary">
             <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <span>{rows ? "Saving…" : "Extracting with Gemini Vision…"}</span>
+            <span>{invoice ? "Saving…" : "Extracting with Gemini Vision…"}</span>
           </div>
         )}
 
@@ -127,94 +185,176 @@ export function Sidebar({ recordCount, vendorCount, onSaved }: Props) {
         )}
       </div>
 
-      {/* Editable extracted rows */}
-      {rows && rows.length > 0 && (
+      {/* Editable invoice */}
+      {invoice && (
         <div className="px-5 py-4 border-b border-border flex flex-col gap-3">
           <p className="font-semibold text-sm">✏️ Review &amp; Edit</p>
-          <p className="text-xs text-muted-foreground">
-            Correct any extraction errors below, then save.
-          </p>
-          {rows.map((row, i) => (
-            <div key={i} className="border border-border rounded-lg p-3 bg-secondary/30 flex flex-col gap-2 text-xs">
-              <label className="flex flex-col gap-0.5">
-                <span className="text-muted-foreground font-medium">Invoice ID</span>
-                <input
-                  className="border border-border rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-primary"
-                  value={row.invoice_id}
-                  onChange={(e) => updateRow(i, "invoice_id", e.target.value)}
-                />
-              </label>
-              <label className="flex flex-col gap-0.5">
-                <span className="text-muted-foreground font-medium">Vendor</span>
-                <input
-                  className="border border-border rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-primary"
-                  value={row.vendor}
-                  onChange={(e) => updateRow(i, "vendor", e.target.value)}
-                />
-              </label>
-              <label className="flex flex-col gap-0.5">
-                <span className="text-muted-foreground font-medium">Date (YYYY-MM-DD)</span>
-                <input
-                  className="border border-border rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-primary"
-                  value={row.date}
-                  onChange={(e) => updateRow(i, "date", e.target.value)}
-                />
-              </label>
-              <label className="flex flex-col gap-0.5">
-                <span className="text-muted-foreground font-medium">Amount ($)</span>
+          <p className="text-xs text-muted-foreground">Correct any extraction errors, then save.</p>
+
+          {/* Header fields */}
+          <div className="border border-primary/20 rounded-lg p-3 bg-primary/5 flex flex-col gap-2 text-xs">
+            <p className="font-semibold text-primary text-xs uppercase tracking-wide">Invoice Header</p>
+            <label className="flex flex-col gap-0.5">
+              <span className="text-muted-foreground font-medium">Invoice ID</span>
+              <input
+                className="border border-border rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-primary"
+                value={invoice.invoice_id}
+                onChange={(e) => updateHeader("invoice_id", e.target.value)}
+              />
+            </label>
+            <label className="flex flex-col gap-0.5">
+              <span className="text-muted-foreground font-medium">Supplier Name</span>
+              <input
+                className="border border-border rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-primary"
+                value={invoice.supplier_name}
+                onChange={(e) => updateHeader("supplier_name", e.target.value)}
+              />
+            </label>
+            <label className="flex flex-col gap-0.5">
+              <span className="text-muted-foreground font-medium">Date (YYYY-MM-DD)</span>
+              <input
+                className="border border-border rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-primary"
+                value={invoice.invoice_date ?? ""}
+                placeholder="null if unknown"
+                onChange={(e) => updateHeader("invoice_date", e.target.value || "")}
+              />
+            </label>
+            <div className="flex gap-2">
+              <label className="flex flex-col gap-0.5 flex-1">
+                <span className="text-muted-foreground font-medium">Grand Total</span>
                 <input
                   type="number"
                   className="border border-border rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-primary"
-                  value={row.amount}
-                  onChange={(e) => updateRow(i, "amount", e.target.value)}
+                  value={invoice.grand_total}
+                  onChange={(e) => updateHeader("grand_total", e.target.value)}
                 />
               </label>
-              <label className="flex flex-col gap-0.5">
-                <span className="text-muted-foreground font-medium">Category</span>
+              <label className="flex flex-col gap-0.5 w-20">
+                <span className="text-muted-foreground font-medium">Currency</span>
                 <select
                   className="border border-border rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-primary"
-                  value={row.category}
-                  onChange={(e) => updateRow(i, "category", e.target.value)}
+                  value={invoice.currency}
+                  onChange={(e) => updateHeader("currency", e.target.value)}
                 >
-                  {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                  {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
                 </select>
               </label>
             </div>
-          ))}
-          <div className="flex gap-2">
+          </div>
+
+          {/* Line items */}
+          <div className="flex flex-col gap-2">
+            <p className="font-semibold text-primary text-xs uppercase tracking-wide">Line Items</p>
+            {invoice.line_items.map((li, i) => (
+              <div key={i} className="border border-border rounded-lg p-3 bg-secondary/30 flex flex-col gap-2 text-xs relative">
+                <button
+                  onClick={() => removeLineItem(i)}
+                  className="absolute top-2 right-2 text-muted-foreground hover:text-destructive text-xs"
+                  title="Remove line item"
+                >✕</button>
+                <label className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground font-medium">Description</span>
+                  <input
+                    className="border border-border rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-primary"
+                    value={li.description}
+                    onChange={(e) => updateLineItem(i, "description", e.target.value)}
+                  />
+                </label>
+                <div className="flex gap-2">
+                  <label className="flex flex-col gap-0.5 flex-1">
+                    <span className="text-muted-foreground font-medium">Qty</span>
+                    <input
+                      type="number"
+                      className="border border-border rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-primary"
+                      value={li.quantity}
+                      onChange={(e) => updateLineItem(i, "quantity", e.target.value)}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-0.5 flex-1">
+                    <span className="text-muted-foreground font-medium">Unit Price</span>
+                    <input
+                      type="number"
+                      className="border border-border rounded px-2 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-primary"
+                      value={li.unit_price}
+                      onChange={(e) => updateLineItem(i, "unit_price", e.target.value)}
+                    />
+                  </label>
+                </div>
+                <div className="flex justify-between items-center pt-1 border-t border-border mt-1">
+                  <span className="text-muted-foreground">Line Total</span>
+                  <span className="font-semibold text-primary">
+                    {invoice.currency} {li.total_price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            ))}
             <button
-              onClick={handleSave}
-              disabled={loading}
-              className="flex-1 bg-primary text-primary-foreground text-xs font-semibold py-2 px-3 rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              onClick={addLineItem}
+              className="text-xs text-primary border border-dashed border-primary/40 rounded-lg py-2 hover:bg-primary/5 transition-colors"
             >
-              💾 Save to Data Lake
-            </button>
-            <button
-              onClick={handleClear}
-              className="flex-1 border border-border text-xs font-semibold py-2 px-3 rounded-lg hover:bg-muted transition-colors"
-            >
-              🗑️ Clear
+              + Add Line Item
             </button>
           </div>
+
+          {/* Duplicate warning */}
+          {duplicate && (
+            <div className="p-3 bg-amber-50 border border-amber-300 rounded-lg text-xs text-amber-800 flex flex-col gap-2">
+              <p className="font-semibold">⚠️ Duplicate Invoice Detected</p>
+              <p>Invoice <span className="font-mono">{duplicate.invoice_id}</span> already exists for <strong>{duplicate.supplier_name}</strong>.</p>
+              <div className="flex gap-2 mt-1">
+                <button
+                  onClick={handleOverwrite}
+                  disabled={loading}
+                  className="flex-1 bg-amber-600 text-white text-xs font-semibold py-1.5 px-2 rounded hover:bg-amber-700 disabled:opacity-50 transition-colors"
+                >
+                  Overwrite
+                </button>
+                <button
+                  onClick={handleSkip}
+                  className="flex-1 border border-amber-400 text-amber-700 text-xs font-semibold py-1.5 px-2 rounded hover:bg-amber-100 transition-colors"
+                >
+                  Skip
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!duplicate && (
+            <div className="flex gap-2">
+              <button
+                onClick={handleSave}
+                disabled={loading}
+                className="flex-1 bg-primary text-primary-foreground text-xs font-semibold py-2 px-3 rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              >
+                💾 Save to Data Lake
+              </button>
+              <button
+                onClick={handleClear}
+                className="flex-1 border border-border text-xs font-semibold py-2 px-3 rounded-lg hover:bg-muted transition-colors"
+              >
+                🗑️ Clear
+              </button>
+            </div>
+          )}
         </div>
       )}
 
       {/* Data lake status */}
       <div className="px-5 py-4 mt-auto">
         <p className="font-semibold text-sm mb-3">📊 Data Lake Status</p>
-        {recordCount === 0 ? (
+        {invoiceCount === 0 ? (
           <div className="p-3 bg-secondary rounded-lg text-xs text-muted-foreground">
             Data lake is empty. Upload invoices to begin.
           </div>
         ) : (
           <div className="flex gap-3">
             <div className="flex-1 bg-secondary rounded-lg p-3 text-center">
-              <p className="text-xl font-bold text-primary">{recordCount}</p>
-              <p className="text-xs text-muted-foreground">Records</p>
+              <p className="text-xl font-bold text-primary">{invoiceCount}</p>
+              <p className="text-xs text-muted-foreground">Invoices</p>
             </div>
             <div className="flex-1 bg-secondary rounded-lg p-3 text-center">
-              <p className="text-xl font-bold text-primary">{vendorCount}</p>
-              <p className="text-xs text-muted-foreground">Vendors</p>
+              <p className="text-xl font-bold text-primary">{supplierCount}</p>
+              <p className="text-xs text-muted-foreground">Suppliers</p>
             </div>
           </div>
         )}

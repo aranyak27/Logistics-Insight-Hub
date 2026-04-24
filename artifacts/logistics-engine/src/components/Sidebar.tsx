@@ -15,19 +15,40 @@ interface Props {
 
 const CURRENCIES = ["USD", "INR", "EUR", "GBP", "SGD", "AED", "CNY"];
 
+const BLANK_INVOICE: ExtractedInvoice = {
+  invoice_id: "",
+  supplier_name: "",
+  invoice_date: null,
+  grand_total: 0,
+  currency: "USD",
+  line_items: [{ description: "", quantity: 1, unit_price: 0, total_price: 0 }],
+};
+
 export function Sidebar({ invoiceCount, supplierCount, onSaved }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [invoice, setInvoice] = useState<ExtractedInvoice | null>(null);
+  const [isManual, setIsManual] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [duplicate, setDuplicate] = useState<InvoiceHeader | null>(null);
 
+  function handleManualEntry() {
+    setInvoice({ ...BLANK_INVOICE, line_items: [{ description: "", quantity: 1, unit_price: 0, total_price: 0 }] });
+    setIsManual(true);
+    setFileName(null);
+    setError(null);
+    setSaveMsg(null);
+    setDuplicate(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
   async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileName(file.name);
+    setIsManual(false);
     setLoading(true);
     setError(null);
     setInvoice(null);
@@ -122,6 +143,7 @@ export function Sidebar({ invoiceCount, supplierCount, onSaved }: Props) {
   function resetForm() {
     setInvoice(null);
     setFileName(null);
+    setIsManual(false);
     if (fileRef.current) fileRef.current.value = "";
   }
 
@@ -165,6 +187,13 @@ export function Sidebar({ invoiceCount, supplierCount, onSaved }: Props) {
           />
         </label>
 
+        <button
+          onClick={handleManualEntry}
+          className="mt-2 w-full text-xs text-primary border border-primary/30 rounded-lg py-2 hover:bg-primary/5 transition-colors font-medium"
+        >
+          ✏️ Enter Manually
+        </button>
+
         {loading && (
           <div className="mt-3 flex items-center gap-2 text-sm text-primary">
             <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -188,8 +217,12 @@ export function Sidebar({ invoiceCount, supplierCount, onSaved }: Props) {
       {/* Editable invoice */}
       {invoice && (
         <div className="px-5 py-4 border-b border-border flex flex-col gap-3">
-          <p className="font-semibold text-sm">✏️ Review &amp; Edit</p>
-          <p className="text-xs text-muted-foreground">Correct any extraction errors, then save.</p>
+          <p className="font-semibold text-sm">
+            {isManual ? "✏️ New Invoice" : "✏️ Review & Edit"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {isManual ? "Fill in the invoice details, then save." : "Correct any extraction errors, then save."}
+          </p>
 
           {/* Header fields */}
           <div className="border border-primary/20 rounded-lg p-3 bg-primary/5 flex flex-col gap-2 text-xs">

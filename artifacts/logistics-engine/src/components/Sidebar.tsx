@@ -35,7 +35,7 @@ export function Sidebar({ invoiceCount, supplierCount, onSaved }: Props) {
   const [duplicate, setDuplicate] = useState<InvoiceHeader | null>(null);
 
   function handleManualEntry() {
-    setInvoice({ ...BLANK_INVOICE, line_items: [{ description: "", quantity: 1, unit_price: 0, total_price: 0 }] });
+    setInvoice({ ...BLANK_INVOICE });
     setIsManual(true);
     setFileName(null);
     setError(null);
@@ -189,7 +189,8 @@ export function Sidebar({ invoiceCount, supplierCount, onSaved }: Props) {
 
         <button
           onClick={handleManualEntry}
-          className="mt-2 w-full text-xs text-primary border border-primary/30 rounded-lg py-2 hover:bg-primary/5 transition-colors font-medium"
+          disabled={loading}
+          className="mt-2 w-full text-xs text-primary border border-primary/30 rounded-lg py-2 hover:bg-primary/5 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
         >
           ✏️ Enter Manually
         </button>

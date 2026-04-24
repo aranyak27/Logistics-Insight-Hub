@@ -56,6 +56,10 @@ const deleteHeader = db.prepare("DELETE FROM invoice_headers WHERE invoice_id = 
 
 router.get("/freight", async (_req, res) => {
   try {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+
     const headers = getHeaders.all();
     const line_items = getLineItems.all();
 

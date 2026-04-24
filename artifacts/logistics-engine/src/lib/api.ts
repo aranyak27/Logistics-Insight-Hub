@@ -57,7 +57,7 @@ export interface FreightData {
 }
 
 export async function fetchFreight(): Promise<FreightData> {
-  const r = await fetch(`${API}/freight`);
+  const r = await fetch(`${API}/freight`, { cache: "no-store" });
   return r.json();
 }
 

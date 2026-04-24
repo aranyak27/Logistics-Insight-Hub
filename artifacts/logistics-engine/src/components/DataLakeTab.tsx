@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -7,21 +7,17 @@ import { type FreightData } from "../lib/api";
 
 const COLORS = ["#1B5CBA", "#22C55E", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4"];
 
-type TableView = "headers" | "items";
-
 interface Props {
   data: FreightData;
 }
 
 export function DataLakeTab({ data }: Props) {
   const { headers, line_items } = data;
-  const [tableView, setTableView] = useState<TableView>("headers");
 
   const totalSpend = useMemo(
     () => headers.reduce((s, h) => s + (h.grand_total ?? 0), 0),
     [headers]
   );
-  const avgInvoice = headers.length > 0 ? totalSpend / headers.length : 0;
   const supplierCount = useMemo(() => new Set(headers.map((h) => h.supplier_name)).size, [headers]);
 
   const supplierSpend = useMemo(() => {
@@ -67,7 +63,7 @@ export function DataLakeTab({ data }: Props) {
           { label: "Total Invoices", value: headers.length },
           { label: "Unique Suppliers", value: supplierCount },
           { label: "Total Spend", value: fmt(totalSpend) },
-          { label: "Avg Invoice", value: fmt(avgInvoice) },
+          { label: "Total Line Items", value: line_items.length },
         ].map(({ label, value }) => (
           <div key={label} className="bg-white border border-border rounded-xl p-4">
             <p className="text-xs text-muted-foreground">{label}</p>
@@ -118,78 +114,68 @@ export function DataLakeTab({ data }: Props) {
         </div>
       </div>
 
-      {/* Tables with toggle */}
+      {/* Invoice Headers table */}
       <div className="bg-white border border-border rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-          <p className="font-semibold text-sm text-primary">
-            {tableView === "headers" ? "Invoice Headers" : "Line Items"}
-          </p>
-          <div className="flex rounded-lg border border-border overflow-hidden text-xs font-semibold">
-            <button
-              onClick={() => setTableView("headers")}
-              className={`px-3 py-1.5 transition-colors ${tableView === "headers" ? "bg-primary text-white" : "hover:bg-muted text-muted-foreground"}`}
-            >
-              Headers ({headers.length})
-            </button>
-            <button
-              onClick={() => setTableView("items")}
-              className={`px-3 py-1.5 transition-colors border-l border-border ${tableView === "items" ? "bg-primary text-white" : "hover:bg-muted text-muted-foreground"}`}
-            >
-              Line Items ({line_items.length})
-            </button>
-          </div>
+        <div className="px-4 py-3 border-b border-border">
+          <p className="font-semibold text-sm text-primary">Invoice Headers <span className="text-muted-foreground font-normal text-xs">({headers.length} records)</span></p>
         </div>
         <div className="overflow-x-auto">
-          {tableView === "headers" ? (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-secondary text-left">
-                  {["Invoice ID", "Supplier", "Date", "Grand Total", "Currency"].map((h) => (
-                    <th key={h} className="px-4 py-2 text-xs font-semibold text-muted-foreground">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {headers.map((h) => (
-                  <tr key={h.invoice_id} className="border-t border-border hover:bg-secondary/30 transition-colors">
-                    <td className="px-4 py-2 font-mono text-xs">{h.invoice_id}</td>
-                    <td className="px-4 py-2">{h.supplier_name}</td>
-                    <td className="px-4 py-2 text-muted-foreground">
-                      {h.invoice_date ?? <span className="italic text-amber-500">missing</span>}
-                    </td>
-                    <td className="px-4 py-2 font-semibold text-primary">{fmt(h.grand_total)}</td>
-                    <td className="px-4 py-2">
-                      <span className="inline-block bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-full">
-                        {h.currency}
-                      </span>
-                    </td>
-                  </tr>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-secondary text-left">
+                {["Invoice ID", "Supplier", "Date", "Grand Total", "Currency"].map((h) => (
+                  <th key={h} className="px-4 py-2 text-xs font-semibold text-muted-foreground">{h}</th>
                 ))}
-              </tbody>
-            </table>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-secondary text-left">
-                  {["#", "Invoice ID", "Description", "Qty", "Unit Price", "Total"].map((h) => (
-                    <th key={h} className="px-4 py-2 text-xs font-semibold text-muted-foreground">{h}</th>
-                  ))}
+              </tr>
+            </thead>
+            <tbody>
+              {headers.map((h) => (
+                <tr key={h.invoice_id} className="border-t border-border hover:bg-secondary/30 transition-colors">
+                  <td className="px-4 py-2 font-mono text-xs">{h.invoice_id}</td>
+                  <td className="px-4 py-2">{h.supplier_name}</td>
+                  <td className="px-4 py-2 text-muted-foreground">
+                    {h.invoice_date ?? <span className="italic text-amber-500">missing</span>}
+                  </td>
+                  <td className="px-4 py-2 font-semibold text-primary">{fmt(h.grand_total)}</td>
+                  <td className="px-4 py-2">
+                    <span className="inline-block bg-primary/10 text-primary text-xs px-2 py-0.5 rounded-full">
+                      {h.currency}
+                    </span>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {line_items.map((li) => (
-                  <tr key={li.item_id} className="border-t border-border hover:bg-secondary/30 transition-colors">
-                    <td className="px-4 py-2 text-muted-foreground text-xs">{li.item_id}</td>
-                    <td className="px-4 py-2 font-mono text-xs">{li.invoice_id}</td>
-                    <td className="px-4 py-2">{li.description}</td>
-                    <td className="px-4 py-2 text-muted-foreground">{li.quantity}</td>
-                    <td className="px-4 py-2 text-muted-foreground">{fmt(li.unit_price)}</td>
-                    <td className="px-4 py-2 font-semibold text-primary">{fmt(li.total_price)}</td>
-                  </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Line Items table */}
+      <div className="bg-white border border-border rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-border">
+          <p className="font-semibold text-sm text-primary">Invoice Line Items <span className="text-muted-foreground font-normal text-xs">({line_items.length} records)</span></p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-secondary text-left">
+                {["#", "Invoice ID", "Description", "Qty", "Unit Price", "Total"].map((h) => (
+                  <th key={h} className="px-4 py-2 text-xs font-semibold text-muted-foreground">{h}</th>
                 ))}
-              </tbody>
-            </table>
-          )}
+              </tr>
+            </thead>
+            <tbody>
+              {line_items.map((li) => (
+                <tr key={li.item_id} className="border-t border-border hover:bg-secondary/30 transition-colors">
+                  <td className="px-4 py-2 text-muted-foreground text-xs">{li.item_id}</td>
+                  <td className="px-4 py-2 font-mono text-xs">{li.invoice_id}</td>
+                  <td className="px-4 py-2">{li.description}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{li.quantity}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{fmt(li.unit_price)}</td>
+                  <td className="px-4 py-2 font-semibold text-primary">{fmt(li.total_price)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

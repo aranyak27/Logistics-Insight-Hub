@@ -78,7 +78,7 @@ router.post("/freight", (req, res): void => {
       insertHeader.run({
         invoice_id: invoice.invoice_id,
         supplier_name: invoice.supplier_name,
-        invoice_date: invoice.invoice_date ?? null,
+        invoice_date: invoice.invoice_date?.trim() || null,
         grand_total: invoice.grand_total,
         currency: invoice.currency ?? "USD",
       });
@@ -110,7 +110,7 @@ router.put("/freight/:invoiceId", (req, res): void => {
       insertHeader.run({
         invoice_id: invoice.invoice_id,
         supplier_name: invoice.supplier_name,
-        invoice_date: invoice.invoice_date ?? null,
+        invoice_date: invoice.invoice_date?.trim() || null,
         grand_total: invoice.grand_total,
         currency: invoice.currency ?? "USD",
       });

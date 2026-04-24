@@ -47,3 +47,7 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# SQLite WAL/SHM runtime artifacts
+*.db-shm
+*.db-wal

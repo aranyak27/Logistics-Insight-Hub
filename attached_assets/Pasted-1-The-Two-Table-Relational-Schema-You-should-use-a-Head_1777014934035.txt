@@ -1,0 +1,72 @@
+1. The Two-Table Relational Schema
+
+You should use a Header-Line relationship. This is the gold standard for financial data because it separates "Summary" facts from "Granular" facts.
+
+Table 1: invoice_headers
+
+This table stores the "One-per-invoice" facts.
+
+invoice_id (Primary Key): A unique string (e.g., the actual Invoice Number).
+
+supplier_name: The name of the vendor.
+
+invoice_date: Stored in YYYY-MM-DD format (LLMs query dates best in this format).
+
+grand_total: The final amount payable.
+
+currency: (e.g., USD, INR).
+
+Table 2: invoice_line_items
+
+This table stores the "Many-per-invoice" facts.
+
+item_id: Auto-incrementing integer.
+
+invoice_id (Foreign Key): Connects this line back to the header.
+
+description: What was bought (e.g., "API Subscription").
+
+quantity: The count.
+
+unit_price: Cost per unit.
+
+total_price: Quantity × Unit Price.
+
+2. The Storage Logic (The "Write" Path)
+
+When your Vision Agent extracts data, your Python code should follow this sequence:
+
+Extract as JSON: The LLM should output a nested object.
+
+Insert Header First: Create a row in invoice_headers.
+
+Loop for Lines: Iterate through the line_items array in the JSON and insert each as a new row in invoice_line_items, tagged with the same invoice_id.
+
+Why this matters for your assignment:
+If a user asks "How much did I spend in total?", the agent queries invoice_headers. If the user asks "How many API Subscriptions did I pay for?", the agent queries invoice_line_items. This prevents the agent from accidentally summing up the grand_total multiple times.
+
+3. Edge Case Logic
+
+The "Duplicate Invoice" Check: Before inserting, check if the invoice_id already exists for that supplier_name. If it does, ask the user if they want to "Overwrite" or "Skip." This demonstrates the "Trust & Safety" requirement.
+
+Missing Fields: If the Vision Agent can't find a date, store it as NULL. Your Analytics Agent should be prompted to say, "I found the invoice, but the date was missing, so I've excluded it from the monthly trend."
+
+4. Query Logic (The "Read" Path)
+
+When the user asks a question, your Agent should be instructed to use SQL Joins.
+
+Example User Question: "Show me the total spent on 'Shipping' from GoComet."Agent Generated Logic:
+
+SQL
+SELECT SUM(li.total_price) 
+FROM invoice_line_items li
+JOIN invoice_headers h ON li.invoice_id = h.invoice_id
+WHERE h.supplier_name = 'GoComet' 
+AND li.description LIKE '%Shipping%';
+Summary for Replit:
+
+Database: Use SQLite (it’s a single file in your Replit directory).
+
+Library: Use sqlite3 or SQLAlchemy in Python.
+
+Storage Strategy: One entry per Invoice in the Header table; Multiple entries per Invoice in the Line Items table.

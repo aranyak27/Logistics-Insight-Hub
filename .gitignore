@@ -51,3 +51,5 @@ Thumbs.db
 # SQLite WAL/SHM runtime artifacts
 *.db-shm
 *.db-wal
+logistics.db-shm
+logistics.db-wal

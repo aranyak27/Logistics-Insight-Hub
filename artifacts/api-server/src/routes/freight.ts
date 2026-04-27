@@ -154,4 +154,19 @@ router.put("/freight/:invoiceId", (req, res): void => {
   }
 });
 
+router.delete("/freight/:invoiceId", (req, res): void => {
+  try {
+    const { invoiceId } = req.params;
+    const existing = findHeader.get(invoiceId);
+    if (!existing) {
+      res.status(404).json({ error: "Invoice not found" });
+      return;
+    }
+    deleteHeader.run(invoiceId);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 export default router;

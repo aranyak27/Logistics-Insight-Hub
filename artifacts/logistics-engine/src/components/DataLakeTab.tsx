@@ -1,14 +1,25 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
 } from "recharts";
 import { type FreightData } from "../lib/api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./ui/alert-dialog";
 
 const COLORS = ["#1B5CBA", "#22C55E", "#F59E0B", "#EF4444", "#8B5CF6", "#06B6D4"];
 
 interface Props {
   data: FreightData;
+  onDelete: (invoiceId: string) => Promise<void>;
 }
 
 const fmtUSD = (v: number) =>
@@ -17,8 +28,11 @@ const fmtUSD = (v: number) =>
 const fmtOrig = (v: number, currency: string) =>
   `${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 
-export function DataLakeTab({ data }: Props) {
+export function DataLakeTab({ data, onDelete }: Props) {
   const { headers, line_items } = data;
+  const [pendingDelete, setPendingDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const totalSpendUSD = useMemo(
     () => headers.reduce((s, h) => s + (h.usd_total ?? h.grand_total), 0),
@@ -48,6 +62,20 @@ export function DataLakeTab({ data }: Props) {
       .slice(0, 6);
   }, [line_items]);
 
+  const handleConfirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await onDelete(pendingDelete);
+      setPendingDelete(null);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Failed to delete invoice. Please try again.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   if (headers.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
@@ -59,152 +87,187 @@ export function DataLakeTab({ data }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Live rates badge */}
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-        Amounts converted to USD using live exchange rates from{" "}
-        <span className="font-medium text-primary">open.er-api.com</span>
-      </div>
+    <>
+      <div className="flex flex-col gap-6">
+        {/* Live rates badge */}
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+          Amounts converted to USD using live exchange rates from{" "}
+          <span className="font-medium text-primary">open.er-api.com</span>
+        </div>
 
-      {/* Metrics */}
-      <div className="grid grid-cols-4 gap-4">
-        {[
-          { label: "Total Invoices", value: headers.length },
-          { label: "Unique Suppliers", value: supplierCount },
-          { label: "Total Spend (USD)", value: fmtUSD(totalSpendUSD) },
-          { label: "Total Line Items", value: line_items.length },
-        ].map(({ label, value }) => (
-          <div key={label} className="bg-white border border-border rounded-xl p-4">
-            <p className="text-xs text-muted-foreground">{label}</p>
-            <p className="text-xl font-bold text-primary mt-1">{value}</p>
+        {/* Metrics */}
+        <div className="grid grid-cols-4 gap-4">
+          {[
+            { label: "Total Invoices", value: headers.length },
+            { label: "Unique Suppliers", value: supplierCount },
+            { label: "Total Spend (USD)", value: fmtUSD(totalSpendUSD) },
+            { label: "Total Line Items", value: line_items.length },
+          ].map(({ label, value }) => (
+            <div key={label} className="bg-white border border-border rounded-xl p-4">
+              <p className="text-xs text-muted-foreground">{label}</p>
+              <p className="text-xl font-bold text-primary mt-1">{value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Charts */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white border border-border rounded-xl p-4">
+            <p className="font-semibold text-sm text-primary mb-1">Total Spend by Supplier</p>
+            <p className="text-xs text-muted-foreground mb-3">All values in USD</p>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={supplierSpend} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#EEF4FF" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                <Tooltip formatter={(v: number) => [fmtUSD(v), "Spend (USD)"]} />
+                <Bar dataKey="value" fill="#1B5CBA" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-        ))}
-      </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white border border-border rounded-xl p-4">
-          <p className="font-semibold text-sm text-primary mb-1">Total Spend by Supplier</p>
-          <p className="text-xs text-muted-foreground mb-3">All values in USD</p>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={supplierSpend} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#EEF4FF" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: number) => [fmtUSD(v), "Spend (USD)"]} />
-              <Bar dataKey="value" fill="#1B5CBA" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="bg-white border border-border rounded-xl p-4">
+            <p className="font-semibold text-sm text-primary mb-1">Spend by Line Item Type</p>
+            <p className="text-xs text-muted-foreground mb-3">All values in USD</p>
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={descriptionSpend}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={80}
+                  label={({ name, percent }) =>
+                    `${name.length > 10 ? name.slice(0, 10) + "…" : name} ${(percent * 100).toFixed(0)}%`
+                  }
+                  labelLine={false}
+                >
+                  {descriptionSpend.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(v: number) => [fmtUSD(v), "Spend (USD)"]} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
-        <div className="bg-white border border-border rounded-xl p-4">
-          <p className="font-semibold text-sm text-primary mb-1">Spend by Line Item Type</p>
-          <p className="text-xs text-muted-foreground mb-3">All values in USD</p>
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie
-                data={descriptionSpend}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={80}
-                label={({ name, percent }) =>
-                  `${name.length > 10 ? name.slice(0, 10) + "…" : name} ${(percent * 100).toFixed(0)}%`
-                }
-                labelLine={false}
-              >
-                {descriptionSpend.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(v: number) => [fmtUSD(v), "Spend (USD)"]} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Invoice Headers table */}
-      <div className="bg-white border border-border rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-border">
-          <p className="font-semibold text-sm text-primary">
-            Invoice Headers{" "}
-            <span className="text-muted-foreground font-normal text-xs">({headers.length} records)</span>
-          </p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-secondary text-left">
-                {["Invoice ID", "Supplier", "Date", "Original Amount", "USD Equivalent"].map((h) => (
-                  <th key={h} className="px-4 py-2 text-xs font-semibold text-muted-foreground">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {headers.map((h) => (
-                <tr key={h.invoice_id} className="border-t border-border hover:bg-secondary/30 transition-colors">
-                  <td className="px-4 py-2 font-mono text-xs">{h.invoice_id}</td>
-                  <td className="px-4 py-2">{h.supplier_name}</td>
-                  <td className="px-4 py-2 text-muted-foreground">
-                    {h.invoice_date ?? <span className="italic text-amber-500">missing</span>}
-                  </td>
-                  <td className="px-4 py-2 text-muted-foreground text-xs">
-                    {fmtOrig(h.grand_total, h.currency)}
-                    {h.currency !== "USD" && (
-                      <span className="ml-1 inline-block bg-primary/10 text-primary text-xs px-1.5 py-0.5 rounded-full">
-                        {h.currency}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 font-semibold text-primary">
-                    {fmtUSD(h.usd_total ?? h.grand_total)}
-                  </td>
+        {/* Invoice Headers table */}
+        <div className="bg-white border border-border rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-border">
+            <p className="font-semibold text-sm text-primary">
+              Invoice Headers{" "}
+              <span className="text-muted-foreground font-normal text-xs">({headers.length} records)</span>
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-secondary text-left">
+                  {["Invoice ID", "Supplier", "Date", "Original Amount", "USD Equivalent", ""].map((h, i) => (
+                    <th key={i} className="px-4 py-2 text-xs font-semibold text-muted-foreground">{h}</th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {headers.map((h) => (
+                  <tr key={h.invoice_id} className="border-t border-border hover:bg-secondary/30 transition-colors">
+                    <td className="px-4 py-2 font-mono text-xs">{h.invoice_id}</td>
+                    <td className="px-4 py-2">{h.supplier_name}</td>
+                    <td className="px-4 py-2 text-muted-foreground">
+                      {h.invoice_date ?? <span className="italic text-amber-500">missing</span>}
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground text-xs">
+                      {fmtOrig(h.grand_total, h.currency)}
+                      {h.currency !== "USD" && (
+                        <span className="ml-1 inline-block bg-primary/10 text-primary text-xs px-1.5 py-0.5 rounded-full">
+                          {h.currency}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 font-semibold text-primary">
+                      {fmtUSD(h.usd_total ?? h.grand_total)}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <button
+                        onClick={() => setPendingDelete(h.invoice_id)}
+                        className="text-xs text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded transition-colors"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Line Items table */}
+        <div className="bg-white border border-border rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-border">
+            <p className="font-semibold text-sm text-primary">
+              Invoice Line Items{" "}
+              <span className="text-muted-foreground font-normal text-xs">({line_items.length} records)</span>
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-secondary text-left">
+                  {["#", "Invoice ID", "Description", "Qty", "Unit Price (USD)", "Total (USD)"].map((h) => (
+                    <th key={h} className="px-4 py-2 text-xs font-semibold text-muted-foreground">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {line_items.map((li) => (
+                  <tr key={li.item_id} className="border-t border-border hover:bg-secondary/30 transition-colors">
+                    <td className="px-4 py-2 text-muted-foreground text-xs">{li.item_id}</td>
+                    <td className="px-4 py-2 font-mono text-xs">{li.invoice_id}</td>
+                    <td className="px-4 py-2">{li.description}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{li.quantity}</td>
+                    <td className="px-4 py-2 text-muted-foreground">
+                      {fmtUSD(li.usd_unit_price ?? li.unit_price)}
+                    </td>
+                    <td className="px-4 py-2 font-semibold text-primary">
+                      {fmtUSD(li.usd_total_price ?? li.total_price)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      {/* Line Items table */}
-      <div className="bg-white border border-border rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-border">
-          <p className="font-semibold text-sm text-primary">
-            Invoice Line Items{" "}
-            <span className="text-muted-foreground font-normal text-xs">({line_items.length} records)</span>
-          </p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-secondary text-left">
-                {["#", "Invoice ID", "Description", "Qty", "Unit Price (USD)", "Total (USD)"].map((h) => (
-                  <th key={h} className="px-4 py-2 text-xs font-semibold text-muted-foreground">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {line_items.map((li) => (
-                <tr key={li.item_id} className="border-t border-border hover:bg-secondary/30 transition-colors">
-                  <td className="px-4 py-2 text-muted-foreground text-xs">{li.item_id}</td>
-                  <td className="px-4 py-2 font-mono text-xs">{li.invoice_id}</td>
-                  <td className="px-4 py-2">{li.description}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{li.quantity}</td>
-                  <td className="px-4 py-2 text-muted-foreground">
-                    {fmtUSD(li.usd_unit_price ?? li.unit_price)}
-                  </td>
-                  <td className="px-4 py-2 font-semibold text-primary">
-                    {fmtUSD(li.usd_total_price ?? li.total_price)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => { if (!open) { setPendingDelete(null); setDeleteError(null); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Invoice</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete invoice <span className="font-mono font-semibold">{pendingDelete}</span>?
+              This will permanently remove the invoice header and all its line items.
+            </AlertDialogDescription>
+            {deleteError && (
+              <p className="text-sm text-red-600 mt-2">{deleteError}</p>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={deleting}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

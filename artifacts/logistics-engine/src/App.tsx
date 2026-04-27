@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchFreight } from "./lib/api";
+import { fetchFreight, deleteInvoice } from "./lib/api";
 import { Sidebar } from "./components/Sidebar";
 import { ChatTab } from "./components/ChatTab";
 import { DataLakeTab } from "./components/DataLakeTab";
@@ -22,6 +22,11 @@ export default function App() {
   const supplierCount = new Set(headers.map((h) => h.supplier_name)).size;
 
   const onSaved = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ["freight"] });
+  }, [queryClient]);
+
+  const onDelete = useCallback(async (invoiceId: string) => {
+    await deleteInvoice(invoiceId);
     queryClient.invalidateQueries({ queryKey: ["freight"] });
   }, [queryClient]);
 
@@ -75,7 +80,7 @@ export default function App() {
               <ChatTab hasData={headers.length > 0} />
             </div>
           ) : (
-            <DataLakeTab data={{ headers, line_items: lineItems }} />
+            <DataLakeTab data={{ headers, line_items: lineItems }} onDelete={onDelete} />
           )}
         </div>
       </main>

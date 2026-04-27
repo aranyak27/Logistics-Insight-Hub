@@ -83,6 +83,14 @@ export async function overwriteInvoice(
   return resp.json();
 }
 
+export async function deleteInvoice(invoiceId: string): Promise<{ success: boolean }> {
+  const resp = await fetch(`${API}/freight/${encodeURIComponent(invoiceId)}`, {
+    method: "DELETE",
+  });
+  if (!resp.ok) throw new Error(await resp.text());
+  return resp.json();
+}
+
 export async function extractInvoice(file: File): Promise<ExtractedInvoice> {
   const fd = new FormData();
   fd.append("file", file);

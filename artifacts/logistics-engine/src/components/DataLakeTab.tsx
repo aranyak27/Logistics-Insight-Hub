@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -33,12 +33,54 @@ export function DataLakeTab({ data, onDelete }: Props) {
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [activeSupplier, setActiveSupplier] = useState<string | null>(null);
 
   const totalSpendUSD = useMemo(
     () => headers.reduce((s, h) => s + (h.usd_total ?? h.grand_total), 0),
     [headers]
   );
   const supplierCount = useMemo(() => new Set(headers.map((h) => h.supplier_name)).size, [headers]);
+
+  const invoiceToSupplier = useMemo(() => {
+    const m: Record<string, string> = {};
+    headers.forEach((h) => { m[h.invoice_id] = h.supplier_name; });
+    return m;
+  }, [headers]);
+
+  const supplierSummary = useMemo(() => {
+    const m: Record<string, { invoices: number; spend: number; lineItems: number }> = {};
+    headers.forEach((h) => {
+      if (!m[h.supplier_name]) m[h.supplier_name] = { invoices: 0, spend: 0, lineItems: 0 };
+      m[h.supplier_name].invoices += 1;
+      m[h.supplier_name].spend += h.usd_total ?? h.grand_total;
+    });
+    line_items.forEach((li) => {
+      const supplier = invoiceToSupplier[li.invoice_id];
+      if (supplier && m[supplier]) m[supplier].lineItems += 1;
+    });
+    return Object.entries(m)
+      .map(([name, stats]) => ({ name, ...stats }))
+      .sort((a, b) => b.spend - a.spend);
+  }, [headers, line_items, invoiceToSupplier]);
+
+  const filteredHeaders = useMemo(
+    () => (activeSupplier ? headers.filter((h) => h.supplier_name === activeSupplier) : headers),
+    [headers, activeSupplier]
+  );
+
+  const filteredLineItems = useMemo(
+    () =>
+      activeSupplier
+        ? line_items.filter((li) => invoiceToSupplier[li.invoice_id] === activeSupplier)
+        : line_items,
+    [line_items, invoiceToSupplier, activeSupplier]
+  );
+
+  useEffect(() => {
+    if (activeSupplier && !headers.some((h) => h.supplier_name === activeSupplier)) {
+      setActiveSupplier(null);
+    }
+  }, [headers, activeSupplier]);
 
   const supplierSpend = useMemo(() => {
     const m: Record<string, number> = {};
@@ -155,12 +197,73 @@ export function DataLakeTab({ data, onDelete }: Props) {
           </div>
         </div>
 
+        {/* Supplier Summary table */}
+        <div className="bg-white border border-border rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-sm text-primary">
+                Supplier Summary{" "}
+                <span className="text-muted-foreground font-normal text-xs">({supplierSummary.length} suppliers)</span>
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">Click a row to filter the tables below</p>
+            </div>
+            {activeSupplier && (
+              <button
+                onClick={() => setActiveSupplier(null)}
+                className="text-xs text-primary hover:text-primary/70 border border-primary/30 hover:border-primary/60 px-2.5 py-1 rounded-full transition-colors"
+              >
+                Clear filter: {activeSupplier}
+              </button>
+            )}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-secondary text-left">
+                  {["Supplier", "Invoices", "Line Items", "Total Spend (USD)"].map((h) => (
+                    <th key={h} className="px-4 py-2 text-xs font-semibold text-muted-foreground">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {supplierSummary.map((s) => {
+                  const isActive = activeSupplier === s.name;
+                  return (
+                    <tr
+                      key={s.name}
+                      onClick={() => setActiveSupplier(isActive ? null : s.name)}
+                      className={`border-t border-border cursor-pointer transition-colors ${
+                        isActive
+                          ? "bg-primary/10 hover:bg-primary/15"
+                          : "hover:bg-secondary/40"
+                      }`}
+                    >
+                      <td className="px-4 py-2 font-medium flex items-center gap-2">
+                        {isActive && (
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary" />
+                        )}
+                        {s.name}
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground">{s.invoices}</td>
+                      <td className="px-4 py-2 text-muted-foreground">{s.lineItems}</td>
+                      <td className="px-4 py-2 font-semibold text-primary">{fmtUSD(s.spend)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         {/* Invoice Headers table */}
         <div className="bg-white border border-border rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-border">
             <p className="font-semibold text-sm text-primary">
               Invoice Headers{" "}
-              <span className="text-muted-foreground font-normal text-xs">({headers.length} records)</span>
+              <span className="text-muted-foreground font-normal text-xs">
+                ({filteredHeaders.length} record{filteredHeaders.length !== 1 ? "s" : ""}
+                {activeSupplier ? ` · filtered` : ""})
+              </span>
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -173,7 +276,7 @@ export function DataLakeTab({ data, onDelete }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {headers.map((h) => (
+                {filteredHeaders.map((h) => (
                   <tr key={h.invoice_id} className="border-t border-border hover:bg-secondary/30 transition-colors">
                     <td className="px-4 py-2 font-mono text-xs">{h.invoice_id}</td>
                     <td className="px-4 py-2">{h.supplier_name}</td>
@@ -211,7 +314,10 @@ export function DataLakeTab({ data, onDelete }: Props) {
           <div className="px-4 py-3 border-b border-border">
             <p className="font-semibold text-sm text-primary">
               Invoice Line Items{" "}
-              <span className="text-muted-foreground font-normal text-xs">({line_items.length} records)</span>
+              <span className="text-muted-foreground font-normal text-xs">
+                ({filteredLineItems.length} record{filteredLineItems.length !== 1 ? "s" : ""}
+                {activeSupplier ? ` · filtered` : ""})
+              </span>
             </p>
           </div>
           <div className="overflow-x-auto">
@@ -224,7 +330,7 @@ export function DataLakeTab({ data, onDelete }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {line_items.map((li) => (
+                {filteredLineItems.map((li) => (
                   <tr key={li.item_id} className="border-t border-border hover:bg-secondary/30 transition-colors">
                     <td className="px-4 py-2 text-muted-foreground text-xs">{li.item_id}</td>
                     <td className="px-4 py-2 font-mono text-xs">{li.invoice_id}</td>
